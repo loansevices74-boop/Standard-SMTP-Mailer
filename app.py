@@ -1,50 +1,39 @@
 import streamlit as st
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 
-# Page configuration
 st.set_page_config(page_title="Simple Mailer", layout="centered")
-st.title("Standard SMTP Mailer")
+st.title("Simple Mailer (via Resend API)")
 
-# Sidebar for SMTP Configuration
-st.sidebar.header("SMTP Configuration")
-smtp_server = st.sidebar.text_input("SMTP Server", value="smtp.gmail.com")
-smtp_port = st.sidebar.number_input("SMTP Port", value=587, step=1)
-sender_email = st.sidebar.text_input("Sender Email")
-# Note: In production, use st.secrets or environment variables for passwords.
-sender_password = st.sidebar.text_input("Sender Password / App Password", type="password")
+# --- Configuration (use st.secrets in production) ---
+st.sidebar.header("API Configuration")
+api_key = st.sidebar.text_input("Resend API Key", type="password")
+sender_email = st.sidebar.text_input("Sender Email", value="onboarding@resend.dev")
 
-# Main form for Email Content
+if api_key:
+    resend.api_key = api_key
+
+# --- Email Form ---
 st.header("Compose Email")
 reply_to = st.text_input("Reply-To Address")
-recipient_email = st.text_input("Recipient Email")
+recipient = st.text_input("Recipient Email")
 subject = st.text_input("Subject")
 body = st.text_area("Message Body", height=200)
 
 if st.button("Send Email"):
-    if not all([sender_email, sender_password, recipient_email, subject, body]):
-        st.error("Please fill in all required fields.")
+    if not all([api_key, sender_email, recipient, subject, body]):
+        st.error("Please fill in all fields.")
     else:
         try:
-            # Create the email message
-            msg = MIMEMultipart()
-            msg['From'] = sender_email
-            msg['To'] = recipient_email
-            msg['Subject'] = subject
+            params = {
+                "from": sender_email,
+                "to": [recipient],
+                "subject": subject,
+                "html": f"<p>{body.replace(chr(10), '<br>')}</p>",
+            }
             if reply_to:
-                msg['Reply-To'] = reply_to
-            
-            msg.attach(MIMEText(body, 'plain'))
+                params["reply_to"] = reply_to
 
-            # Connect to the SMTP server and send
-            # Using TLS for secure connection
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.starttls() 
-            server.login(sender_email, sender_password)
-            server.send_message(msg)
-            server.quit()
-            
-            st.success("Email sent successfully!")
+            email = resend.Emails.send(params)
+            st.success(f"Email sent! ID: {email['id']}")
         except Exception as e:
-            st.error(f"Failed to send email: {e}")
+            st.error(f"Failed: {e}")
